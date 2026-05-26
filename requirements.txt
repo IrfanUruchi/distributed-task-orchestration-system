@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+grpcio
+grpcio-tools
+protobuf
+psutil
+requests
+jinja2

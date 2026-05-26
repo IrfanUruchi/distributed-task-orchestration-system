@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package orchestrator;
+
+service WorkerService {
+  rpc RunTask (TaskRequest) returns (TaskResponse);
+  rpc HealthCheck (HealthRequest) returns (HealthResponse);
+}
+
+message TaskRequest {
+  string task_id = 1;
+  string task_type = 2;
+  string payload = 3;
+  string required_capability = 4;
+}
+
+message TaskResponse {
+  string task_id = 1;
+  string status = 2;
+  string result = 3;
+  string error = 4;
+}
+
+message HealthRequest {
+  string worker_id = 1;
+}
+
+message HealthResponse {
+  string worker_id = 1;
+  bool alive = 2;
+  double cpu_percent = 3;
+  double memory_percent = 4;
+}

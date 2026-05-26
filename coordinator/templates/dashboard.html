@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Distributed Orchestrator Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css?v=10">
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">Distributed Orchestrator · V10</p>
+                <h1>Cluster Control Center</h1>
+                <p class="subtitle">
+                    Capability-aware orchestration with persistent queues, worker specialization and task lifecycle tracking.
+                </p>
+            </div>
+
+            <div class="topbar-status">
+                <span class="system-pill" id="systemState">Loading...</span>
+                <span class="mode-pill" id="schedulerPill">Scheduler: -</span>
+            </div>
+        </header>
+
+        <section class="metrics-grid">
+            <article class="metric-card">
+                <span>Total Workers</span>
+                <strong id="totalWorkers">0</strong>
+            </article>
+            <article class="metric-card">
+                <span>Healthy Workers</span>
+                <strong id="healthyWorkers">0</strong>
+            </article>
+            <article class="metric-card">
+                <span>Unavailable</span>
+                <strong id="failedWorkers">0</strong>
+            </article>
+            <article class="metric-card">
+                <span>Total Tasks</span>
+                <strong id="totalTasks">0</strong>
+            </article>
+            <article class="metric-card">
+                <span>Avg Task Time</span>
+                <strong id="avgDurationText">0s</strong>
+            </article>
+        </section>
+
+        <main class="dashboard-grid">
+            <section class="panel cluster-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="section-kicker">Cluster</p>
+                        <h2>Worker Nodes</h2>
+                        <p>Registered workers with current health, resource usage, capabilities and scheduling score.</p>
+                    </div>
+                    <button class="ghost-btn" onclick="loadWorkers()">Refresh</button>
+                </div>
+
+                <div id="workers" class="worker-grid"></div>
+
+                <div class="comparison-panel">
+                    <div class="comparison-header">
+                        <div>
+                            <p class="section-kicker">Evaluation</p>
+                            <h2>Scheduler Comparison</h2>
+                            <p>Run the same workload with round-robin and load-aware scheduling.</p>
+                        </div>
+                        <div class="comparison-controls">
+                            <select id="compareTaskType">
+                                <option value="quick_check">Quick Check</option>
+                                <option value="cpu_benchmark">CPU Benchmark</option>
+                                <option value="cpu_heavy">CPU Heavy Benchmark</option>
+                                <option value="data_processing">Data Processing</option>
+                                <option value="stress_test">Stress Test</option>
+                            </select>
+                            <input id="compareCount" type="number" min="1" max="50" value="5">
+                            <button onclick="runComparison()">Compare</button>
+                        </div>
+                    </div>
+
+                    <div id="comparisonResult" class="comparison-empty">
+                        Run a comparison to see scheduler timing and worker distribution.
+                    </div>
+                </div>
+            </section>
+
+            <aside class="control-stack">
+                <section class="panel compact-panel">
+                    <div class="panel-header tight">
+                        <div>
+                            <p class="section-kicker">Scheduler</p>
+                            <h2>Strategy</h2>
+                        </div>
+                    </div>
+
+                    <div class="integrated-control">
+                        <select id="schedulerMode">
+                            <option value="load_aware">Load Aware</option>
+                            <option value="round_robin">Round Robin</option>
+                        </select>
+                        <button onclick="updateSchedulerMode()">Apply</button>
+                    </div>
+
+                    <p class="hint">Used by the coordinator when selecting the next healthy worker.</p>
+                </section>
+
+                <section class="panel compact-panel">
+                    <div class="panel-header tight">
+                        <div>
+                            <p class="section-kicker">Execution</p>
+                            <h2>Run Workload</h2>
+                        </div>
+                    </div>
+
+                    <div class="integrated-control run-control">
+                        <select id="taskType">
+                            <option value="quick_check">Quick Check</option>
+                            <option value="cpu_benchmark">CPU Benchmark</option>
+                            <option value="cpu_heavy">CPU Extreme</option>
+                            <option value="data_processing">Data Processing</option>
+                            <option value="stress_test">Stress Test</option>
+                        </select>
+                        <select id="taskPriority">
+                            <option value="HIGH">High</option>
+                            <option value="MEDIUM" selected>Medium</option>
+                            <option value="LOW">Low</option>
+                        </select>
+                        <button onclick="submitTask()">Queue</button>
+                    </div>
+
+                    <div class="result-box">
+                        <div class="result-title">
+                            <span>Latest Queue Response</span>
+                        </div>
+                        <div id="taskResultCards" class="result-empty">No task queued yet.</div>
+                        <details class="raw-details">
+                            <summary>Raw response</summary>
+                            <pre id="taskResult">No task queued yet.</pre>
+                        </details>
+                    </div>
+                </section>
+
+                <section class="panel compact-panel">
+                    <div class="panel-header tight">
+                        <div>
+                            <p class="section-kicker">Evaluation</p>
+                            <h2>Benchmark</h2>
+                        </div>
+                    </div>
+
+                    <div class="integrated-control triple">
+                        <select id="benchmarkTaskType">
+                            <option value="quick_check">Quick Check</option>
+                            <option value="cpu_benchmark">CPU Benchmark</option>
+                            <option value="cpu_heavy">CPU Heavy Benchmark</option>
+                            <option value="data_processing">Data Processing</option>
+                            <option value="stress_test">Stress Test</option>
+                        </select>
+                        <input id="benchmarkCount" type="number" min="1" max="50" value="5">
+                        <div class="benchmark-actions">
+                            <button onclick="runBenchmark()">Sequential</button>
+                            <button class="parallel-btn" onclick="runParallelBenchmark()">Parallel</button>
+                        </div>
+                    </div>
+
+                    <p class="hint">Runs the same workload multiple times and records duration data.</p>
+
+                    <div class="result-box">
+                        <div class="result-title">
+                            <span>Benchmark Result</span>
+                        </div>
+                        <div id="benchmarkResultCards" class="result-empty">No benchmark executed yet.</div>
+                        <details class="raw-details">
+                            <summary>Raw response</summary>
+                            <pre id="benchmarkResult">No benchmark executed yet.</pre>
+                        </details>
+                    </div>
+                </section>
+            </aside>
+        </main>
+
+        <section class="panel task-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="section-kicker">History</p>
+                    <h2>Task Timeline</h2>
+                    <p>Latest tasks handled by the coordinator.</p>
+                </div>
+                <button class="ghost-btn" onclick="loadTasks()">Refresh</button>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Task ID</th>
+                            <th>Type</th>
+                            <th>Priority</th>
+                            <th>Capability</th>
+                            <th>Status</th>
+                            <th>Worker</th>
+                            <th>Scheduler</th>
+                            <th>Duration</th>
+                            <th>Attempts</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTable">
+                        <tr>
+                            <td colspan="10">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel task-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="section-kicker">Attempts</p>
+                    <h2>Task Attempt Details</h2>
+                    <p>Detailed execution attempts stored in SQLite for the selected task.</p>
+                </div>
+            </div>
+
+            <div id="attemptDetails" class="result-empty">
+                Select a task from the timeline to view attempt history.
+            </div>
+        </section>
+    </div>
+
+    <script>
+        function statusClass(state) {
+            const value = (state || "").toUpperCase();
+
+            if (value === "HEALTHY" || value === "COMPLETED") return "healthy";
+            if (value === "RUNNING" || value === "PENDING" || value === "RETRYING" || value === "RECOVERING") return "running";
+            return "down";
+        }
+
+        function shortId(id) {
+            if (!id) return "-";
+            return id.substring(0, 8);
+        }
+
+        function prettyMode(mode) {
+            if (mode === "round_robin") return "Round Robin";
+            if (mode === "load_aware") return "Load Aware";
+            return mode || "-";
+        }
+
+        function safeText(value) {
+            return value || "-";
+        }
+
+        function resultCard(label, value, type = "") {
+            return `
+                <div class="result-mini-card ${type}">
+                    <span>${label}</span>
+                    <strong>${value}</strong>
+                </div>
+            `;
+        }
+
+        function renderTaskResult(data) {
+            const status = (data.status || "-").toUpperCase();
+
+            const statusType = status === "COMPLETED"
+                ? "success"
+                : status === "FAILED"
+                    ? "danger"
+                    : "";
+
+            const worker = data.selected_worker
+                ? data.selected_worker.replace("host.docker.internal:", ":")
+                : "-";
+
+            const duration = data.duration_seconds !== null && data.duration_seconds !== undefined
+                ? `${data.duration_seconds}s`
+                : "-";
+
+            const taskId = data.task_id ? shortId(data.task_id) : "-";
+            const priority = data.priority || "-";
+
+            document.getElementById("taskResultCards").innerHTML = `
+                <div class="result-summary">
+                    ${resultCard("Status", status, statusType)}
+                    ${resultCard("Priority", priority)}
+                    ${resultCard("Capability", data.required_capability || "-")}
+                    ${resultCard("Task ID", taskId)}
+                    ${resultCard("Scheduler", prettyMode(data.scheduler_mode))}
+                    ${resultCard("Worker", worker)}
+                    ${resultCard("Duration", duration)}
+                </div>
+                ${data.message ? `<div class="inline-info">${data.message}</div>` : ""}
+                ${data.error ? `<div class="inline-error">${data.error}</div>` : ""}
+            `;
+        }
+
+        async function watchTask(taskId) {
+            let tries = 0;
+
+            const interval = setInterval(async () => {
+                tries++;
+
+                try {
+                    const res = await fetch(`/tasks/${taskId}`);
+                    const task = await res.json();
+
+                    renderTaskResult({
+                        task_id: task.task_id,
+                        status: task.status,
+                        priority: task.priority,
+                        scheduler_mode: task.scheduler_mode,
+                        selected_worker: task.final_worker,
+                        required_capability: task.required_capability,
+                        duration_seconds: task.duration_seconds,
+                        error: task.error,
+                        result: task.result
+                    });
+
+                    document.getElementById('taskResult').textContent = JSON.stringify(task, null, 2);
+
+                    loadTasks();
+                    loadWorkers();
+
+                    if (["COMPLETED", "FAILED"].includes((task.status || "").toUpperCase()) || tries > 60) {
+                        clearInterval(interval);
+                    }
+
+                } catch (error) {
+                    console.error("Task watch failed", error);
+
+                    if (tries > 60) {
+                        clearInterval(interval);
+                    }
+                }
+            }, 1000);
+        }
+
+        function renderBenchmarkResult(data) {
+            const completedType = data.failed === 0 ? "success" : "";
+            const failedType = data.failed > 0 ? "danger" : "";
+
+            document.getElementById("benchmarkResultCards").innerHTML = `
+                <div class="result-summary benchmark-summary">
+                    ${resultCard("Completed", data.completed ?? 0, completedType)}
+                    ${resultCard("Failed", data.failed ?? 0, failedType)}
+                    ${resultCard("Total Time", `${data.total_time_seconds ?? 0}s`)}
+                    ${resultCard("Avg Time", `${data.average_task_duration_seconds ?? 0}s`)}
+                    ${resultCard("Tasks", data.tasks_submitted ?? 0)}
+                    ${resultCard("Scheduler", prettyMode(data.scheduler_mode))}
+                    ${resultCard("Execution", data.execution_mode || "sequential")}
+                </div>
+            `;
+        }
+
+        function workerDistribution(results) {
+            const counts = {};
+
+            results.forEach(item => {
+                const worker = item.selected_worker
+                    ? item.selected_worker.replace("host.docker.internal:", ":")
+                    : "unknown";
+
+                counts[worker] = (counts[worker] || 0) + 1;
+            });
+
+            return counts;
+        }
+
+        function renderDistributionBars(title, counts, total) {
+            const rows = Object.entries(counts).map(([worker, count]) => {
+                const width = total > 0 ? Math.round((count / total) * 100) : 0;
+
+                return `
+                    <div class="distribution-row">
+                        <div class="distribution-label">
+                            <span>${worker}</span>
+                            <strong>${count}</strong>
+                        </div>
+                        <div class="distribution-track">
+                            <div style="width:${width}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+
+            return `
+                <div class="distribution-block">
+                    <h4>${title}</h4>
+                    ${rows || `<p class="hint">No worker data yet.</p>`}
+                </div>
+            `;
+        }
+
+        function renderComparison(data) {
+            const rr = data.round_robin;
+            const la = data.load_aware;
+
+            const rrAvg = rr.average_task_duration_seconds ?? 0;
+            const laAvg = la.average_task_duration_seconds ?? 0;
+
+            const winnerText = data.winner === "tie"
+                ? "Tie"
+                : prettyMode(data.winner);
+
+            const rrClass = data.winner === "round_robin" ? "winner" : "";
+            const laClass = data.winner === "load_aware" ? "winner" : "";
+
+            const rrDist = workerDistribution(rr.results || []);
+            const laDist = workerDistribution(la.results || []);
+            const total = data.tasks_per_scheduler || 1;
+
+            document.getElementById("comparisonResult").className = "comparison-content";
+            document.getElementById("comparisonResult").innerHTML = `
+                <div class="comparison-summary-line">
+                    <span>Workload: <strong>${data.workload}</strong></span>
+                    <span>Tasks each: <strong>${data.tasks_per_scheduler}</strong></span>
+                    <span>Winner: <strong>${winnerText}</strong></span>
+                </div>
+
+                <div class="comparison-cards">
+                    <article class="comparison-card ${rrClass}">
+                        <div class="comparison-card-head">
+                            <span>Round Robin</span>
+                            ${rrClass ? "<strong>Winner</strong>" : ""}
+                        </div>
+                        <div class="comparison-number">${rrAvg}s</div>
+                        <div class="comparison-meta">
+                            <span>Total ${rr.total_time_seconds}s</span>
+                            <span>${rr.completed}/${rr.tasks_submitted} completed</span>
+                        </div>
+                    </article>
+
+                    <article class="comparison-card ${laClass}">
+                        <div class="comparison-card-head">
+                            <span>Load Aware</span>
+                            ${laClass ? "<strong>Winner</strong>" : ""}
+                        </div>
+                        <div class="comparison-number">${laAvg}s</div>
+                        <div class="comparison-meta">
+                            <span>Total ${la.total_time_seconds}s</span>
+                            <span>${la.completed}/${la.tasks_submitted} completed</span>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="distribution-grid">
+                    ${renderDistributionBars("Round Robin worker spread", rrDist, total)}
+                    ${renderDistributionBars("Load Aware worker spread", laDist, total)}
+                </div>
+            `;
+        }
+
+        async function loadSchedulerMode() {
+            const res = await fetch('/scheduler/mode');
+            const data = await res.json();
+
+            document.getElementById('schedulerMode').value = data.mode;
+            document.getElementById('schedulerPill').textContent = `Scheduler: ${prettyMode(data.mode)}`;
+        }
+
+        async function updateSchedulerMode() {
+            const mode = document.getElementById('schedulerMode').value;
+
+            const res = await fetch(`/scheduler/mode/${mode}`, {
+                method: 'POST'
+            });
+
+            const data = await res.json();
+            document.getElementById('schedulerPill').textContent = `Scheduler: ${prettyMode(data.mode)}`;
+            document.getElementById('taskResult').textContent = JSON.stringify(data, null, 2);
+            document.getElementById("taskResultCards").innerHTML = `
+                <div class="result-summary">
+                    ${resultCard("Scheduler", prettyMode(data.mode), "success")}
+                    ${resultCard("Status", data.status || "updated")}
+                </div>
+            `;
+
+            loadTasks();
+        }
+
+        async function loadWorkers() {
+            const res = await fetch('/workers');
+            const data = await res.json();
+
+            const failed = data.unavailable_workers ?? (data.total_workers - data.healthy_workers);
+
+            document.getElementById('totalWorkers').textContent = data.total_workers;
+            document.getElementById('healthyWorkers').textContent = data.healthy_workers;
+            document.getElementById('failedWorkers').textContent = failed;
+
+            const systemState = document.getElementById('systemState');
+
+            if (data.total_workers === 0) {
+                systemState.textContent = "No workers registered";
+                systemState.className = "system-pill warning";
+            } else if (failed === 0) {
+                systemState.textContent = "System healthy";
+                systemState.className = "system-pill healthy-bg";
+            } else {
+                systemState.textContent = "Degraded";
+                systemState.className = "system-pill warning";
+            }
+
+            let html = "";
+
+            if (data.workers.length === 0) {
+                html = `<div class="empty">No workers registered yet.</div>`;
+            }
+
+            data.workers.forEach(worker => {
+                const cpu = Number(worker.cpu_percent || 0).toFixed(1);
+                const mem = Number(worker.memory_percent || 0).toFixed(1);
+                const score = Number(worker.score || 0).toFixed(1);
+                const cls = statusClass(worker.state);
+                const heartbeat = worker.last_heartbeat
+                    ? new Date(worker.last_heartbeat * 1000).toLocaleTimeString()
+                    : "-";
+
+                const capabilities = (worker.capabilities || ["GENERAL"]).map(capability => {
+                    return `<span class="capability-badge ${String(capability).toLowerCase()}">${capability}</span>`;
+                }).join("");
+
+                html += `
+                    <article class="worker-card">
+                        <div class="worker-head">
+                            <div>
+                                <h3>${worker.address}</h3>
+                                <span class="state ${cls}">${worker.state}</span>
+                                <div class="capability-row">${capabilities}</div>
+                            </div>
+                            <div class="score-chip">
+                                <span>Score</span>
+                                <strong>${score}</strong>
+                            </div>
+                        </div>
+
+                        <div class="resource-row">
+                            <div class="bar-label">
+                                <span>CPU</span>
+                                <strong>${cpu}%</strong>
+                            </div>
+                            <div class="bar"><div style="width:${cpu}%"></div></div>
+                        </div>
+
+                        <div class="resource-row">
+                            <div class="bar-label">
+                                <span>Memory</span>
+                                <strong>${mem}%</strong>
+                            </div>
+                            <div class="bar"><div style="width:${mem}%"></div></div>
+                        </div>
+
+                        <div class="worker-foot">
+                            <span>Last heartbeat</span>
+                            <strong>${heartbeat}</strong>
+                        </div>
+                    </article>
+                `;
+            });
+
+            document.getElementById('workers').innerHTML = html;
+        }
+
+        async function loadTasks() {
+            const res = await fetch('/tasks');
+            const data = await res.json();
+
+            document.getElementById('totalTasks').textContent = data.count;
+            document.getElementById('avgDurationText').textContent = `${data.average_duration_seconds || 0}s`;
+
+            const table = document.getElementById('taskTable');
+
+            if (data.tasks.length === 0) {
+                table.innerHTML = `
+                    <tr>
+                        <td colspan="10">No tasks submitted yet.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            table.innerHTML = "";
+
+            data.tasks.slice().reverse().forEach(task => {
+                const duration = task.duration_seconds !== null && task.duration_seconds !== undefined
+                    ? `${task.duration_seconds}s`
+                    : "-";
+
+                table.innerHTML += `
+                    <tr>
+                        <td>${shortId(task.task_id)}</td>
+                        <td>${task.task_type}</td>
+                        <td><span class="priority-pill ${String(task.priority || '').toLowerCase()}">${safeText(task.priority)}</span></td>
+                        <td><span class="capability-badge ${String(task.required_capability || 'general').toLowerCase()}">${safeText(task.required_capability)}</span></td>
+                        <td><span class="state ${statusClass(task.status)}">${task.status}</span></td>
+                        <td>${safeText(task.final_worker).replace("host.docker.internal:", ":")}</td>
+                        <td>${prettyMode(task.scheduler_mode)}</td>
+                        <td>${duration}</td>
+                        <td>${task.attempts ? task.attempts.length : task.attempt_count || 0}</td>
+                        <td>
+                            <button class="mini-btn" onclick="loadAttemptDetails('${task.task_id}')">View</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function loadAttemptDetails(taskId) {
+            const res = await fetch(`/tasks/${taskId}`);
+            const task = await res.json();
+
+            const box = document.getElementById("attemptDetails");
+
+            if (!task.attempts || task.attempts.length === 0) {
+                box.className = "result-empty";
+                box.textContent = "No attempts recorded for this task yet.";
+                return;
+            }
+
+            box.className = "attempt-box";
+
+            const attemptsHtml = task.attempts.map(attempt => {
+                const started = attempt.started_at
+                    ? new Date(attempt.started_at * 1000).toLocaleTimeString()
+                    : "-";
+
+                const finished = attempt.finished_at
+                    ? new Date(attempt.finished_at * 1000).toLocaleTimeString()
+                    : "-";
+
+                const duration = attempt.duration_seconds !== null && attempt.duration_seconds !== undefined
+                    ? `${attempt.duration_seconds}s`
+                    : "-";
+
+                const worker = attempt.worker
+                    ? attempt.worker.replace("host.docker.internal:", ":")
+                    : "-";
+
+                return `
+                    <article class="attempt-card">
+                        <div class="attempt-head">
+                            <strong>Attempt ${attempt.attempt}</strong>
+                            <span class="state ${statusClass(attempt.status)}">${attempt.status}</span>
+                        </div>
+
+                        <div class="attempt-grid">
+                            <div>
+                                <span>Worker</span>
+                                <strong>${worker}</strong>
+                            </div>
+                            <div>
+                                <span>Started</span>
+                                <strong>${started}</strong>
+                            </div>
+                            <div>
+                                <span>Finished</span>
+                                <strong>${finished}</strong>
+                            </div>
+                            <div>
+                                <span>Duration</span>
+                                <strong>${duration}</strong>
+                            </div>
+                        </div>
+
+                        ${attempt.error ? `<div class="inline-error">${attempt.error}</div>` : ""}
+                    </article>
+                `;
+            }).join("");
+
+            box.innerHTML = `
+                <div class="attempt-summary">
+                    <span>Task <strong>${shortId(task.task_id)}</strong></span>
+                    <span>Type <strong>${task.task_type}</strong></span>
+                    <span>Priority <strong>${task.priority}</strong></span>
+                    <span>Capability <strong>${task.required_capability || "-"}</strong></span>
+                    <span>Status <strong>${task.status}</strong></span>
+                    <span>Total attempts <strong>${task.attempts.length}</strong></span>
+                </div>
+                ${attemptsHtml}
+            `;
+        }
+
+        async function submitTask() {
+            const taskType = document.getElementById('taskType').value;
+            const priority = document.getElementById('taskPriority').value;
+
+            document.getElementById('taskResultCards').textContent = "Adding task to persistent queue...";
+            document.getElementById('taskResultCards').className = "result-empty loading";
+            document.getElementById('taskResult').textContent = "Adding task to persistent queue...";
+
+            const res = await fetch('/submit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    task_type: taskType,
+                    payload: taskType,
+                    priority: priority
+                })
+            });
+
+            const data = await res.json();
+
+            document.getElementById('taskResultCards').className = "";
+            renderTaskResult(data);
+            document.getElementById('taskResult').textContent = JSON.stringify(data, null, 2);
+
+            if (data.task_id) {
+                watchTask(data.task_id);
+            }
+
+            loadWorkers();
+            loadTasks();
+        }
+
+        async function runBenchmark() {
+            const taskType = document.getElementById('benchmarkTaskType').value;
+            const count = Number(document.getElementById('benchmarkCount').value || 5);
+
+            document.getElementById('benchmarkResultCards').textContent = "Running benchmark...";
+            document.getElementById('benchmarkResultCards').className = "result-empty loading";
+            document.getElementById('benchmarkResult').textContent = "Running benchmark...";
+
+            const res = await fetch('/benchmark', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    task_type: taskType,
+                    count: count
+                })
+            });
+
+            const data = await res.json();
+
+            const summary = {
+                workload: data.workload,
+                scheduler_mode: data.scheduler_mode,
+                execution_mode: data.execution_mode || "sequential",
+                tasks_submitted: data.tasks_submitted,
+                completed: data.completed,
+                failed: data.failed,
+                total_time_seconds: data.total_time_seconds,
+                average_task_duration_seconds: data.average_task_duration_seconds
+            };
+
+            document.getElementById('benchmarkResultCards').className = "";
+            renderBenchmarkResult(summary);
+            document.getElementById('benchmarkResult').textContent = JSON.stringify(data, null, 2);
+
+            loadWorkers();
+            loadTasks();
+        }
+
+        async function runParallelBenchmark() {
+            const taskType = document.getElementById('benchmarkTaskType').value;
+            const count = Number(document.getElementById('benchmarkCount').value || 5);
+
+            document.getElementById('benchmarkResultCards').textContent = "Running parallel benchmark...";
+            document.getElementById('benchmarkResultCards').className = "result-empty loading";
+            document.getElementById('benchmarkResult').textContent = "Running parallel benchmark...";
+
+            const res = await fetch('/benchmark/parallel', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    task_type: taskType,
+                    count: count
+                })
+            });
+
+            const data = await res.json();
+
+            const summary = {
+                workload: data.workload,
+                scheduler_mode: data.scheduler_mode,
+                execution_mode: data.execution_mode || "parallel",
+                tasks_submitted: data.tasks_submitted,
+                completed: data.completed,
+                failed: data.failed,
+                total_time_seconds: data.total_time_seconds,
+                average_task_duration_seconds: data.average_task_duration_seconds
+            };
+
+            document.getElementById('benchmarkResultCards').className = "";
+            renderBenchmarkResult(summary);
+            document.getElementById('benchmarkResult').textContent = JSON.stringify(data, null, 2);
+
+            loadWorkers();
+            loadTasks();
+        }
+
+        async function runComparison() {
+            const taskType = document.getElementById('compareTaskType').value;
+            const count = Number(document.getElementById('compareCount').value || 5);
+
+            const result = document.getElementById("comparisonResult");
+            result.className = "comparison-empty loading";
+            result.textContent = "Running scheduler comparison...";
+
+            const res = await fetch('/benchmark/compare', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    task_type: taskType,
+                    count: count
+                })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                result.className = "comparison-empty";
+                result.textContent = data.detail || "Comparison failed.";
+                return;
+            }
+
+            renderComparison(data);
+            loadSchedulerMode();
+            loadWorkers();
+            loadTasks();
+        }
+
+        loadSchedulerMode();
+        loadWorkers();
+        loadTasks();
+
+        setInterval(loadWorkers, 3000);
+        setInterval(loadTasks, 2000);
+        setInterval(loadSchedulerMode, 8000);
+    </script>
+</body>
+</html>

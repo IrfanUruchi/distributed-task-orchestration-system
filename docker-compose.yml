@@ -1,0 +1,60 @@
+services:
+  coordinator:
+    image: irfanuruchi/distributed-orchestrator-coordinator:v10
+    container_name: orchestrator-coordinator
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_PATH=/app/data/orchestrator.db
+    volumes:
+      - ./data:/app/data
+    networks:
+      - orchestrator-net
+    restart: unless-stopped
+
+  worker-50051:
+    image: irfanuruchi/distributed-orchestrator-worker:v10
+    container_name: worker-50051
+    environment:
+      - WORKER_HOST=worker-50051
+      - WORKER_PORT=50051
+      - WORKER_CAPABILITIES=GENERAL,CPU
+      - COORDINATOR_URL=http://orchestrator-coordinator:8000
+    networks:
+      - orchestrator-net
+    restart: unless-stopped
+    depends_on:
+      - coordinator
+
+  worker-50052:
+    image: irfanuruchi/distributed-orchestrator-worker:v10
+    container_name: worker-50052
+    environment:
+      - WORKER_HOST=worker-50052
+      - WORKER_PORT=50052
+      - WORKER_CAPABILITIES=GENERAL,MEMORY
+      - COORDINATOR_URL=http://orchestrator-coordinator:8000
+    networks:
+      - orchestrator-net
+    restart: unless-stopped
+    depends_on:
+      - coordinator
+
+  worker-50053:
+    image: irfanuruchi/distributed-orchestrator-worker:v10
+    container_name: worker-50053
+    environment:
+      - WORKER_HOST=worker-50053
+      - WORKER_PORT=50053
+      - WORKER_CAPABILITIES=GENERAL,CPU,MEMORY
+      - COORDINATOR_URL=http://orchestrator-coordinator:8000
+    networks:
+      - orchestrator-net
+    restart: unless-stopped
+    depends_on:
+      - coordinator
+
+networks:
+  orchestrator-net:
+    driver: bridge
+    
